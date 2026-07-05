@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>あーれー帯引き ♡</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700&amp;family=Zen+Maru+Gothic:wght@700&amp;display=swap');
+
+        body {
+            font-family: "Noto Sans JP", "Zen Maru Gothic", system-ui, sans-serif;
+        }
+
+        #stage {
+            perspective: 1100px;
+            perspective-origin: 50% 45%;
+        }
+
+        #character-wrapper {
+            transition: transform 0.75s cubic-bezier(0.23, 1, 0.32, 1);
+            transform-style: preserve-3d;
+            transform-origin: center 55%;
+        }
+
+        #obi-handle {
+            transition: all 0.3s cubic-bezier(0.23, 1.0, 0.32, 1);
+            box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.3),
+                0 4px 6px -4px rgb(0 0 0 / 0.3),
+                inset 0 -3px 6px rgb(255 255 255 / 0.4);
+            cursor: grab;
+            user-select: none;
+            z-index: 20;
+        }
+
+        #obi-handle:active {
+            cursor: grabbing;
+            transform: scale(0.92);
+        }
+
+        .floating-text {
+            position: absolute;
+            animation: floatUp 1.3s ease-out forwards;
+            pointer-events: none;
+            z-index: 30;
+            text-shadow: 0 2px 4px rgb(0 0 0 / 0.3);
+        }
+
+        @keyframes floatUp {
+            0% {
+                opacity: 1;
+                transform: translateY(0) scale(1);
+            }
+
+            100% {
+                opacity: 0;
+                transform: translateY(-90px) scale(0.7);
+            }
+        }
+    </style>
+</head>
+
+<body class="bg-[#fff1f7] min-h-screen pb-8">
+    <div class="max-w-md mx-auto">
+        <div class="pt-6 px-4 text-center">
+            <div class="flex items-center justify-center gap-x-3 mb-1">
+                <span class="text-4xl">👘</span>
+                <h1 class="text-3xl font-bold text-[#9f1239]">あーれー帯引き</h1>
+                <span class="text-4xl">♡</span>
+            </div>
+            <p class="text-[#831a3d] text-sm">右にスワイプして帯を引っ張ってね！</p>
+        </div>
+
+        <div class="mt-4 mx-4 bg-white rounded-3xl shadow-xl overflow-hidden border border-[#fda4af]">
+            <div class="p-5">
+                <div id="stage"
+                    class="relative mx-auto w-full max-w-[280px] aspect-[784/1176] bg-[#fff1f7] rounded-2xl overflow-hidden shadow-inner"
+                    style="max-height: 420px;">
+                    <div id="character-wrapper" class="absolute inset-0 flex items-center justify-center">
+                        <img id="character-img" src="./img/kimono.jpg" class="w-full h-full object-contain select-none"
+                            alt="着物のお姉さん">
+                    </div>
+
+                    <div id="obi-handle"
+                        class="absolute w-12 h-12 bg-gradient-to-br from-[#c0262e] to-[#9f1239] rounded-full flex items-center justify-center border-2 border-[#fda4af] shadow-lg"
+                        style="left: 53%; top: 80%; transform: translate(-50%, -50%);">
+                        <div class="text-white text-2xl font-bold drop-shadow">→</div>
+                    </div>
+                    <!-- ==================================================== -->
+
+                    <div id="floating-text-area" class="absolute inset-0 pointer-events-none"></div>
+                </div>
+
+                <div class="mt-4 px-1">
+                    <div class="flex items-center justify-between text-xs mb-1.5 px-1">
+                        <div class="text-[#9f1239]">残り帯の長さ</div>
+                        <div id="remaining-text" class="font-bold text-[#9f1239] text-lg">5.0m</div>
+                    </div>
+                    <div class="h-3 bg-[#fce7f3] rounded-full overflow-hidden">
+                        <div id="progress-bar" class="h-full bg-gradient-to-r from-[#f472b6] to-[#e11d48] rounded-full"
+                            style="width: 100%"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="mt-4 mx-4 text-center text-sm text-[#831a3d]">
+            帯の端を<strong>右へスワイプ</strong>して引っ張る<br>
+            残り0mで下着姿（正面）に変わります
+        </div>
+
+        <div class="mt-5 flex justify-center px-4">
+            <button onclick="resetApp()"
+                class="px-6 py-2.5 bg-white border border-[#fda4af] text-[#9f1239] font-bold rounded-2xl active:scale-95 transition-all">
+                リセット
+            </button>
+        </div>
+    </div>
+
+    <script>
+        let currentAngle = 0;
+        let remainingMeters = 5.0;
+        const INITIAL_METERS = 5.0;
+        let isFinalState = false;
+        let isDragging = false;
+        let startX = 0;
+
+        const characterWrapper = document.getElementById('character-wrapper');
+        const characterImg = document.getElementById('character-img');
+        const obiHandle = document.getElementById('obi-handle');
+        const progressBar = document.getElementById('progress-bar');
+        const remainingText = document.getElementById('remaining-text');
+        const floatingArea = document.getElementById('floating-text-area');
+
+        const originalHandleLeft = '53%';   // 初期位置（リセット時に使用）
+
+        obiHandle.addEventListener('pointerdown', e => {
+            if (isFinalState) return;
+            isDragging = true;
+            startX = e.clientX;
+            obiHandle.style.transition = 'none';
+            characterWrapper.style.transition = 'none';
+        });
+
+        document.addEventListener('pointermove', e => {
+            if (!isDragging || isFinalState) return;
+            const deltaX = Math.max(0, e.clientX - startX);
+            const newLeft = Math.min(88, 53 + (deltaX / 11));
+            obiHandle.style.left = `${newLeft}%`;
+
+            const liveAngle = deltaX * 1.85;
+            characterWrapper.style.transform = `rotateY(${liveAngle}deg)`;
+        });
+
+        document.addEventListener('pointerup', () => {
+            if (!isDragging) return;
+            isDragging = false;
+            obiHandle.style.transition = 'all 0.35s cubic-bezier(0.23,1,0.32,1)';
+            obiHandle.style.left = originalHandleLeft;
+
+            const deltaX = Math.max(0, event ? event.clientX - startX : 0);
+            if (deltaX > 55) performPull(deltaX);
+            else characterWrapper.style.transform = `rotateY(${currentAngle}deg)`;
+        });
+
+        function performPull(deltaX) {
+            const pulled = Math.min(remainingMeters, deltaX / 210);
+            remainingMeters = Math.max(0, remainingMeters - pulled);
+
+            currentAngle += 70 + deltaX * 0.7;
+            characterWrapper.style.transition = 'transform 0.75s cubic-bezier(0.23,1,0.32,1)';
+            characterWrapper.style.transform = `rotateY(${currentAngle}deg)`;
+
+            updateUI();
+            showAareText();
+            if ('speechSynthesis' in window) {
+                const u = new SpeechSynthesisUtterance(remainingMeters < 1.5 ? 'あ゛ーれーれー♡' : 'あーれー');
+                u.lang = 'ja-JP'; u.pitch = 1.3; speechSynthesis.speak(u);
+            }
+            createSakuraParticles(6);
+
+            if (remainingMeters <= 0.08 && !isFinalState) triggerFinalState();
+        }
+
+        function updateUI() {
+            progressBar.style.width = `${(remainingMeters / INITIAL_METERS) * 100}%`;
+            remainingText.textContent = `${remainingMeters.toFixed(1)}m`;
+        }
+
+        function showAareText() {
+            const texts = ['あーれー♡', 'あ゛ーれー！', 'やんっ♡'];
+            const el = document.createElement('div');
+            el.className = `floating-text text-3xl font-bold text-[#e11d48]`;
+            el.style.left = `${42 + Math.random() * 28}%`;
+            el.style.top = `${32 + Math.random() * 18}%`;
+            el.textContent = texts[Math.floor(Math.random() * texts.length)];
+            floatingArea.appendChild(el);
+            setTimeout(() => el.remove(), 1400);
+        }
+
+        function createSakuraParticles(n) {
+            for (let i = 0; i < n; i++) {
+                const p = document.createElement('div');
+                p.textContent = '🌸';
+                p.style.position = 'absolute';
+                p.style.left = `${40 + Math.random() * 30}%`;
+                p.style.top = `${25 + Math.random() * 40}%`;
+                p.style.fontSize = '18px';
+                p.style.opacity = '0.8';
+                characterWrapper.appendChild(p);
+                setTimeout(() => {
+                    p.style.transition = 'all 2.8s linear';
+                    p.style.transform = `translateY(110px) rotate(${Math.random() * 400}deg)`;
+                    p.style.opacity = '0';
+                    setTimeout(() => p.remove(), 3000);
+                }, 50);
+            }
+        }
+
+        function triggerFinalState() {
+            isFinalState = true;
+            characterImg.style.transition = 'opacity 0.5s';
+            characterImg.style.opacity = '0';
+
+            setTimeout(() => {
+                characterImg.src = './img/underwear.jpg';
+                characterImg.style.opacity = '1';
+
+                // 正面向き
+                currentAngle = 0;
+                characterWrapper.style.transition = 'transform 0.8s ease';
+                characterWrapper.style.transform = 'rotateY(0deg)';
+
+                // === 矢印を非表示 ===
+                obiHandle.style.transition = 'opacity 0.4s ease';
+                obiHandle.style.opacity = '0';
+                setTimeout(() => {
+                    obiHandle.style.display = 'none';
+                }, 400);
+
+                createSakuraParticles(22);
+            }, 350);
+        }
+
+        function resetApp() {
+            currentAngle = 0;
+            remainingMeters = INITIAL_METERS;
+            isFinalState = false;
+
+            characterImg.src = './img/kimono.jpg';
+            characterWrapper.style.transform = 'rotateY(0deg)';
+
+            // 矢印を再表示・位置リセット
+            obiHandle.style.display = 'flex';
+            obiHandle.style.opacity = '1';
+            obiHandle.style.left = originalHandleLeft;
+
+            progressBar.style.width = '100%';
+            remainingText.textContent = '5.0m';
+            document.getElementById('floating-text-area').innerHTML = '';
+        }
+
+        console.log('%cあーれー帯引き v4 (underwear時矢印非表示・位置コメント付き) 起動', 'color:#f472b6');
+    </script>
+</body>
+
+</html>
