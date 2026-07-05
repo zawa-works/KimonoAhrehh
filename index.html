@@ -11,32 +11,37 @@
 
         body {
             font-family: "Noto Sans JP", "Zen Maru Gothic", system-ui, sans-serif;
+            -webkit-touch-callout: none;
+            /* iOS長押しメニュー無効 */
         }
 
         #stage {
             perspective: 1100px;
             perspective-origin: 50% 45%;
-        }
-
-        #character-wrapper {
-            transition: transform 0.75s cubic-bezier(0.23, 1, 0.32, 1);
-            transform-style: preserve-3d;
-            transform-origin: center 55%;
-        }
-
-        #obi-handle {
-            transition: all 0.3s cubic-bezier(0.23, 1.0, 0.32, 1);
-            box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.3),
-                0 4px 6px -4px rgb(0 0 0 / 0.3),
-                inset 0 -3px 6px rgb(255 255 255 / 0.4);
-            cursor: grab;
+            /* 長押しメニュー防止 */
+            -webkit-user-select: none;
             user-select: none;
-            z-index: 20;
+            -webkit-touch-callout: none;
         }
 
-        #obi-handle:active {
-            cursor: grabbing;
-            transform: scale(0.92);
+        #character-img {
+            -webkit-user-select: none;
+            user-select: none;
+            -webkit-touch-callout: none;
+            pointer-events: none;
+            /* 画像自体はタッチイベントを通さない */
+        }
+
+        #swipe-area {
+            position: absolute;
+            right: 0;
+            top: 0;
+            width: 45%;
+            height: 100%;
+            cursor: grab;
+            z-index: 10;
+            touch-action: none;
+            /* ブラウザのデフォルト動作（スクロール・長押し）を無効 */
         }
 
         .floating-text {
@@ -69,7 +74,7 @@
                 <h1 class="text-3xl font-bold text-[#9f1239]">あーれー帯引き</h1>
                 <span class="text-4xl">♡</span>
             </div>
-            <p class="text-[#831a3d] text-sm">右にスワイプして帯を引っ張ってね！</p>
+            <p class="text-[#831a3d] text-sm">画面の<strong>右側</strong>を右にスワイプして帯を引っ張ってね！</p>
         </div>
 
         <div class="mt-4 mx-4 bg-white rounded-3xl shadow-xl overflow-hidden border border-[#fda4af]">
@@ -77,17 +82,14 @@
                 <div id="stage"
                     class="relative mx-auto w-full max-w-[280px] aspect-[784/1176] bg-[#fff1f7] rounded-2xl overflow-hidden shadow-inner"
                     style="max-height: 420px;">
+
                     <div id="character-wrapper" class="absolute inset-0 flex items-center justify-center">
                         <img id="character-img" src="./img/kimono.jpg" class="w-full h-full object-contain select-none"
                             alt="着物のお姉さん">
                     </div>
 
-                    <div id="obi-handle"
-                        class="absolute w-12 h-12 bg-gradient-to-br from-[#c0262e] to-[#9f1239] rounded-full flex items-center justify-center border-2 border-[#fda4af] shadow-lg"
-                        style="left: 53%; top: 80%; transform: translate(-50%, -50%);">
-                        <div class="text-white text-2xl font-bold drop-shadow">→</div>
-                    </div>
-                    <!-- ==================================================== -->
+                    <!-- 右側スワイプ検知エリア -->
+                    <div id="swipe-area"></div>
 
                     <div id="floating-text-area" class="absolute inset-0 pointer-events-none"></div>
                 </div>
@@ -106,8 +108,7 @@
         </div>
 
         <div class="mt-4 mx-4 text-center text-sm text-[#831a3d]">
-            帯の端を<strong>右へスワイプ</strong>して引っ張る<br>
-            残り0mで下着姿（正面）に変わります
+            右側を<strong>右方向にスワイプ</strong> → 長くスワイプするほど大きく回転します
         </div>
 
         <div class="mt-5 flex justify-center px-4">
@@ -128,57 +129,63 @@
 
         const characterWrapper = document.getElementById('character-wrapper');
         const characterImg = document.getElementById('character-img');
-        const obiHandle = document.getElementById('obi-handle');
         const progressBar = document.getElementById('progress-bar');
         const remainingText = document.getElementById('remaining-text');
         const floatingArea = document.getElementById('floating-text-area');
+        const swipeArea = document.getElementById('swipe-area');
 
-        const originalHandleLeft = '53%';   // 初期位置（リセット時に使用）
+        // コンテキストメニュー（長押しメニュー）完全無効化
+        document.addEventListener('contextmenu', e => {
+            if (e.target.closest('#stage')) {
+                e.preventDefault();
+                return false;
+            }
+        });
 
-        obiHandle.addEventListener('pointerdown', e => {
+        swipeArea.addEventListener('pointerdown', e => {
             if (isFinalState) return;
             isDragging = true;
             startX = e.clientX;
-            obiHandle.style.transition = 'none';
             characterWrapper.style.transition = 'none';
         });
 
         document.addEventListener('pointermove', e => {
             if (!isDragging || isFinalState) return;
             const deltaX = Math.max(0, e.clientX - startX);
-            const newLeft = Math.min(88, 53 + (deltaX / 11));
-            obiHandle.style.left = `${newLeft}%`;
-
-            const liveAngle = deltaX * 1.85;
+            const liveAngle = deltaX * 2.0;
             characterWrapper.style.transform = `rotateY(${liveAngle}deg)`;
         });
 
-        document.addEventListener('pointerup', () => {
+        document.addEventListener('pointerup', e => {
             if (!isDragging) return;
             isDragging = false;
-            obiHandle.style.transition = 'all 0.35s cubic-bezier(0.23,1,0.32,1)';
-            obiHandle.style.left = originalHandleLeft;
 
-            const deltaX = Math.max(0, event ? event.clientX - startX : 0);
-            if (deltaX > 55) performPull(deltaX);
-            else characterWrapper.style.transform = `rotateY(${currentAngle}deg)`;
+            const deltaX = Math.max(0, e ? e.clientX - startX : 0);
+
+            if (deltaX > 40) {
+                performPull(deltaX);
+            } else {
+                characterWrapper.style.transition = 'transform 0.5s cubic-bezier(0.23,1,0.32,1)';
+                characterWrapper.style.transform = `rotateY(${currentAngle}deg)`;
+            }
         });
 
         function performPull(deltaX) {
-            const pulled = Math.min(remainingMeters, deltaX / 210);
+            const pulled = Math.min(remainingMeters, deltaX / 180);
             remainingMeters = Math.max(0, remainingMeters - pulled);
 
-            currentAngle += 70 + deltaX * 0.7;
+            currentAngle += 80 + deltaX * 0.65;
             characterWrapper.style.transition = 'transform 0.75s cubic-bezier(0.23,1,0.32,1)';
             characterWrapper.style.transform = `rotateY(${currentAngle}deg)`;
 
             updateUI();
             showAareText();
+
             if ('speechSynthesis' in window) {
                 const u = new SpeechSynthesisUtterance(remainingMeters < 1.5 ? 'あ゛ーれーれー♡' : 'あーれー');
                 u.lang = 'ja-JP'; u.pitch = 1.3; speechSynthesis.speak(u);
             }
-            createSakuraParticles(6);
+            createSakuraParticles(7);
 
             if (remainingMeters <= 0.08 && !isFinalState) triggerFinalState();
         }
@@ -227,17 +234,9 @@
                 characterImg.src = './img/underwear.jpg';
                 characterImg.style.opacity = '1';
 
-                // 正面向き
                 currentAngle = 0;
                 characterWrapper.style.transition = 'transform 0.8s ease';
                 characterWrapper.style.transform = 'rotateY(0deg)';
-
-                // === 矢印を非表示 ===
-                obiHandle.style.transition = 'opacity 0.4s ease';
-                obiHandle.style.opacity = '0';
-                setTimeout(() => {
-                    obiHandle.style.display = 'none';
-                }, 400);
 
                 createSakuraParticles(22);
             }, 350);
@@ -251,17 +250,12 @@
             characterImg.src = './img/kimono.jpg';
             characterWrapper.style.transform = 'rotateY(0deg)';
 
-            // 矢印を再表示・位置リセット
-            obiHandle.style.display = 'flex';
-            obiHandle.style.opacity = '1';
-            obiHandle.style.left = originalHandleLeft;
-
             progressBar.style.width = '100%';
             remainingText.textContent = '5.0m';
             document.getElementById('floating-text-area').innerHTML = '';
         }
 
-        console.log('%cあーれー帯引き v4 (underwear時矢印非表示・位置コメント付き) 起動', 'color:#f472b6');
+        console.log('%cあーれー帯引き v6 (長押しメニュー無効) 起動', 'color:#f472b6');
     </script>
 </body>
 
